@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>ОРДЕН: Путь к власти</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg: #0b1020;
+            --card-top: #26304a;
+            --card-bottom: #161d31;
+            --edge: #090d1a;
+            --primary: #6366f1;
+            --primary-dark: #3730a3;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --success: #10b981;
+            --common: #94a3b8;
+            --rare: #3b82f6;
+            --epic: #a855f7;
+            --legendary: #eab308;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 20px 16px 120px;
+            overflow-x: hidden;
+        }
+        h1 { font-size: 22px; margin-bottom: 4px; }
+        .sub { color: var(--muted); font-size: 14px; margin-bottom: 22px; }
+        
+        /* Статистика */
+        .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+        .stat-card {
+            background: linear-gradient(180deg, var(--card-top), var(--card-bottom));
+            border: 1px solid rgba(129,140,248,.16);
+            border-radius: 12px;
+            padding: 14px;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 -2px 0 rgba(0,0,0,.35), 0 4px 0 var(--edge), 0 10px 20px rgba(0,0,0,.5);
+        }
+        .stat-label { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+        .stat-value { font-size: 20px; font-weight: 700; color: var(--primary); }
+        
+        /* Кнопка тапа */
+        .tap-btn {
+            width: 100%;
+            padding: 60px 20px;
+            background: linear-gradient(180deg, var(--card-top), var(--card-bottom));
+            border: 2px solid var(--primary);
+            border-radius: 20px;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text);
+            cursor: pointer;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 -3px 0 rgba(0,0,0,.35), 0 6px 0 var(--primary-dark), 0 16px 32px rgba(99,102,241,.3);
+            transition: transform .1s, box-shadow .1s;
+            margin-bottom: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+        .tap-btn:active {
+            transform: translateY(4px);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 2px 0 var(--primary-dark), 0 8px 16px rgba(99,102,241,.3);
+        }
+        .tap-btn .ripple {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(99,102,241,.4);
+            transform: scale(0);
+            animation: ripple .6s linear;
+            pointer-events: none;
+        }
+        @keyframes ripple { to { transform: scale(4); opacity: 0; } }
+        
+        /* Синергии */
+        .synergies-box {
+            background: linear-gradient(180deg, rgba(99,102,241,.15), rgba(99,102,241,.05));
+            border: 1px solid rgba(99,102,241,.3);
+            border-radius: 12px;
+            padding: 12px;
+            margin-bottom: 24px;
+        }
+        .synergies-box h3 { font-size: 14px; color: var(--primary); margin-bottom: 8px; }
+        .syn-tag {
+            display: inline-block;
+            background: rgba(99,102,241,.2);
+            border: 1px solid var(--primary);
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 11px;
+            margin: 2px;
+        }
+        
+        /* Фильтры категорий */
+        .filters {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            margin-bottom: 16px;
+        }
+        .filter-btn {
+            flex-shrink: 0;
+            padding: 8px 14px;
+            background: var(--card-bottom);
+            border: 1px solid rgba(129,140,248,.2);
+            border-radius: 20px;
+            color: var(--muted);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all .2s;
+        }
+        .filter-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        /* Магазин карт */
+        .section-title { font-size: 18px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .groups-list { display: flex; flex-direction: column; gap: 12px; }
+        
+        .group-card {
+            position: relative;
+            background: linear-gradient(180deg, var(--card-top), var(--card-bottom));
+            border-radius: 14px;
+            padding: 14px;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,.1), inset 0 -2px 0 rgba(0,0,0,.35), 0 4px 0 var(--edge), 0 10px 20px rgba(0,0,0,.5);
+            transition: all .2s;
+            overflow: hidden;
+        }
+        /* Цветная полоса редкости сверху */
+        .group-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: var(--rarity-color, var(--muted));
+        }
+        .group-card.rare { --rarity-color: var(--rare); }
+        .group-card.epic { --rarity-color: var(--epic); }
+        .group-card.legendary { --rarity-color: var(--legendary); }
+        
+        .group-card.owned {
+            opacity: .7;
+            border: 1px solid var(--success);
+        }
+        .group-card.owned::after {
+            content: '✓';
+            position: absolute;
+            top: 10px; right: 10px;
+            background: var(--success);
+            color: white;
+            width: 24px; height: 24px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700;
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+        .card-name { font-size: 15px; font-weight: 600; flex: 1; padding-right: 8px; }
+        .card-rarity {
+            font-size: 10px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            background: rgba(255,255,255,.1);
+            color: var(--rarity-color, var(--muted));
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+        }
+        .card-desc {
+            font-size: 12px;
+            color: var(--muted);
+            font-style: italic;
+            margin-bottom: 10px;
+        }
+        .card-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+        }
+        .card-income { color: var(--success); font-weight: 600; }
+        .card-price { color: var(--primary); font-weight: 700; }
+        
+        .buy-btn {
+            margin-top: 10px;
+            width: 100%;
+            padding: 10px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 3px 0 var(--primary-dark);
+            transition: all .15s;
+        }
+        .buy-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--primary-dark); }
+        .buy-btn:disabled { opacity: .5; cursor: not-allowed; }
+        
+        .toast {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--success);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-weight: 600;
+            opacity: 0;
+            transition: opacity .3s;
+            pointer-events: none;
+            z-index: 1000;
+            max-width: 90%;
+            text-align: center;
+        }
+        .toast.show { opacity: 1; }
+        .toast.synergy { background: var(--epic); }
+    </style>
+</head>
+<body>
+    <h1>🔺 ОРДЕН</h1>
+    <p class="sub">Путь к власти</p>
+
+    <div class="stats">
+        <div class="stat-card">
+            <div class="stat-label">💰 Влияние</div>
+            <div class="stat-value" id="influence">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">📈 Пассив/сек</div>
+            <div class="stat-value" id="passive">0</div>
+        </div>
+    </div>
+
+    <button class="tap-btn" id="tapBtn">
+        👆 ТАПАЙ<br>
+        <span style="font-size: 14px; color: var(--muted);">+<span id="tapPower">1</span> Влияния</span>
+    </button>
+
+    <!-- Блок активных синергий -->
+    <div class="synergies-box" id="synergiesBox" style="display: none;">
+        <h3>🎯 Активные синергии</h3>
+        <div id="synergiesList"></div>
+    </div>
+
+    <h2 class="section-title"> Магазин Групп</h2>
+    
+    <!-- Фильтры по категориям -->
+    <div class="filters" id="filters">
+        <button class="filter-btn active" data-cat="all">Все</button>
+        <button class="filter-btn" data-cat="media">📰 Медиа</button>
+        <button class="filter-btn" data-cat="finance">💰 Финансы</button>
+        <button class="filter-btn" data-cat="science">🔬 Наука</button>
+        <button class="filter-btn" data-cat="culture"> Культура</button>
+        <button class="filter-btn" data-cat="shadow">🕵️ Теневые</button>
+    </div>
+
+    <div class="groups-list" id="groupsList"></div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        if (tg) { tg.ready(); tg.expand(); try { tg.setHeaderColor('#0b1020'); } catch(e) {} }
+        
+        // ЗАМЕНИ на свой URL Render
+        const API_URL = const API_URL = 'http://141.133.199.17:8000';
+
+        const userId = tg?.initDataUnsafe?.user?.id || 1;
+
+        let state = { influence: 0, tap_power: 1, base_tap_power: 1, passive_income: 0, groups_owned: [], active_synergies: [], active_combos: [] };
+        let catalog = {};
+        let currentFilter = 'all';
+
+        // Загрузка каталога
+        async function fetchCatalog() {
+            try {
+                const res = await fetch(`${API_URL}/api/catalog`);
+                catalog = await res.json();
+            } catch (e) { console.error(e); }
+        }
+
+        async function fetchState() {
+            try {
+                const res = await fetch(`${API_URL}/api/state?user_id=${userId}`);
+                if (!res.ok) throw new Error('Ошибка загрузки');
+                state = await res.json();
+                updateUI();
+            } catch (e) { console.error(e); }
+        }
+
+        function updateUI() {
+            document.getElementById('influence').textContent = Math.floor(state.influence).toLocaleString();
+            document.getElementById('passive').textContent = state.passive_income.toFixed(1);
+            document.getElementById('tapPower').textContent = state.tap_power.toFixed(1);
+            renderSynergies();
+            renderGroups();
+        }
+
+        function renderSynergies() {
+            const box = document.getElementById('synergiesBox');
+            const list = document.getElementById('synergiesList');
+            const all = [...state.active_synergies, ...state.active_combos];
+            
+            if (all.length === 0) {
+                box.style.display = 'none';
+                return;
+            }
+            box.style.display = 'block';
+            list.innerHTML = all.map(s => `<span class="syn-tag">${s.name}</span>`).join('');
+        }
+
+        function renderGroups() {
+            const list = document.getElementById('groupsList');
+            list.innerHTML = '';
+            
+            const cards = Object.entries(catalog.cards || {});
+            const filtered = currentFilter === 'all' ? cards : cards.filter(([id, c]) => c.category === currentFilter);
+            
+            // Сортировка: сначала обычные, потом редкие, эпические, легендарные
+            const rarityOrder = { common: 0, rare: 1, epic: 2, legendary: 3 };
+            filtered.sort((a, b) => rarityOrder[a[1].rarity] - rarityOrder[b[1].rarity]);
+            
+            filtered.forEach(([id, card]) => {
+                const owned = state.groups_owned.includes(id);
+                const canAfford = state.influence >= card.price;
+                const div = document.createElement('div');
+                div.className = `group-card ${card.rarity} ${owned ? 'owned' : ''}`;
+                div.innerHTML = `
+                    <div class="card-header">
+                        <div class="card-name">${card.name}</div>
+                        <div class="card-rarity">${catalog.rarity_names?.[card.rarity] || card.rarity}</div>
+                    </div>
+                    <div class="card-desc">${card.desc}</div>
+                    <div class="card-stats">
+                        <div class="card-income">+${card.income}/сек</div>
+                        <div class="card-price">${owned ? '✓ Куплено' : `${card.price.toLocaleString()} 💰`}</div>
+                    </div>
+                    ${!owned ? `<button class="buy-btn" ${!canAfford ? 'disabled' : ''} onclick="buyGroup('${id}')">Купить</button>` : ''}
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        async function tap() {
+            try {
+                const res = await fetch(`${API_URL}/api/tap`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId })
+                });
+                const data = await res.json();
+                state.influence = data.influence;
+                state.tap_power = data.tap_power;
+                updateUI();
+                createRipple(event);
+            } catch (e) { console.error(e); }
+        }
+
+        async function buyGroup(id) {
+            try {
+                const res = await fetch(`${API_URL}/api/buy_group`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, group_id: id })
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    showToast(err.detail || 'Ошибка');
+                    return;
+                }
+                const data = await res.json();
+                state = { ...state, influence: data.influence, passive_income: data.passive_income, groups_owned: data.groups_owned };
+                updateUI();
+                
+                if (data.new_synergies?.length > 0 || data.new_combos?.length > 0) {
+                    const msg = [...(data.new_synergies || []), ...(data.new_combos || [])].join(', ');
+                    showToast(`🔥 Новая синергия: ${msg}`, true);
+                } else {
+                    showToast(`Куплено: ${data.bought_card}`);
+                }
+            } catch (e) { showToast('Ошибка сети'); }
+        }
+
+        function createRipple(e) {
+            const btn = document.getElementById('tapBtn');
+            const ripple = document.createElement('span');
+            ripple.className = 'ripple';
+            const rect = btn.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            ripple.style.width = ripple.style.height = size + 'px';
+            ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+            ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+            btn.appendChild(ripple);
+            setTimeout(() => ripple.remove(), 600);
+        }
+
+        function showToast(msg, isSynergy = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = `toast show ${isSynergy ? 'synergy' : ''}`;
+            setTimeout(() => toast.className = 'toast', 2500);
+        }
+
+        // Фильтры
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentFilter = btn.dataset.cat;
+                renderGroups();
+            });
+        });
+
+        document.getElementById('tapBtn').addEventListener('click', tap);
+
+        // Инициализация
+        Promise.all([fetchCatalog(), fetchState()]).then(() => {
+            setInterval(fetchState, 3000);
+        });
+    </script>
+</body>
+</html>
