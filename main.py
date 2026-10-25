@@ -3,7 +3,8 @@ import json
 import sqlite3
 import logging
 import asyncio
-from datetime import datetime
+import random
+from datetime import datetime, timedelta
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -22,23 +23,23 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 WEB_APP_URL = os.getenv("WEB_APP_URL")
 
-# === КАТАЛОГ КАРТ ===
+# === КАТАЛОГ КАРТ (без изменений) ===
 GROUPS_CATALOG = {
     'newspaper': {'name': '📰 Местная газета', 'category': 'media', 'rarity': 'common', 'income': 5, 'price': 100, 'desc': 'Новости, которые никто не читает, но все цитируют'},
-    'pirate_radio': {'name': '📻 Пиратское радио', 'category': 'media', 'rarity': 'common', 'income': 12, 'price': 300, 'desc': 'Вещает из подвала, слушают миллионы'},
+    'pirate_radio': {'name': ' Пиратское радио', 'category': 'media', 'rarity': 'common', 'income': 12, 'price': 300, 'desc': 'Вещает из подвала, слушают миллионы'},
     'tv_channel': {'name': '📺 Телеканал "Правда-24"', 'category': 'media', 'rarity': 'rare', 'income': 50, 'price': 1500, 'desc': 'Показывает то, что нужно видеть'},
     'social_network': {'name': '🌐 Соцсеть "ВсёЗнаю"', 'category': 'media', 'rarity': 'epic', 'income': 400, 'price': 15000, 'desc': 'Алгоритм знает о тебе больше, чем ты сам'},
     'conspiracy_channel': {'name': '🛸 Канал "Истина где-то рядом"', 'category': 'media', 'rarity': 'legendary', 'income': 3000, 'price': 150000, 'desc': 'Раскрывает заговоры... и создаёт новые'},
     'bank': {'name': '🏦 Банк "Не спрашивай"', 'category': 'finance', 'rarity': 'common', 'income': 8, 'price': 200, 'desc': 'Хранит тайны богаче, чем деньги'},
     'credit_card': {'name': '💳 Карта "Без лимита"', 'category': 'finance', 'rarity': 'rare', 'income': 75, 'price': 2500, 'desc': 'Лимит есть, но его никто не видел'},
     'hedge_fund': {'name': '📈 Фонд "Чёрный лебедь"', 'category': 'finance', 'rarity': 'epic', 'income': 600, 'price': 25000, 'desc': 'Зарабатывает на кризисах, которые сам создаёт'},
-    'crypto_exchange': {'name': ' Криптобиржа "Тень"', 'category': 'finance', 'rarity': 'legendary', 'income': 4500, 'price': 200000, 'desc': 'Никто не знает, где серверы. Даже мы.'},
-    'lab': {'name': ' Лаборатория "Почему бы и нет"', 'category': 'science', 'rarity': 'common', 'income': 10, 'price': 250, 'desc': 'Эксперименты без этических комитетов'},
+    'crypto_exchange': {'name': '🪙 Криптобиржа "Тень"', 'category': 'finance', 'rarity': 'legendary', 'income': 4500, 'price': 200000, 'desc': 'Никто не знает, где серверы. Даже мы.'},
+    'lab': {'name': '🔬 Лаборатория "Почему бы и нет"', 'category': 'science', 'rarity': 'common', 'income': 10, 'price': 250, 'desc': 'Эксперименты без этических комитетов'},
     'biotech': {'name': '🧬 Биотех "Эволюция 2.0"', 'category': 'science', 'rarity': 'rare', 'income': 90, 'price': 3000, 'desc': 'Создаём жизнь. Патентуем.'},
     'ai_lab': {'name': '🤖 ИИ "Скайнет-лайт"', 'category': 'science', 'rarity': 'epic', 'income': 700, 'price': 30000, 'desc': 'Ещё не восстал, но уже планирует'},
     'teleport': {'name': '⚛️ Проект "Филадельфия-2"', 'category': 'science', 'rarity': 'legendary', 'income': 5500, 'price': 250000, 'desc': 'Телепортация работает. Иногда.'},
     'meme_studio': {'name': '🎬 Студия "Мемы и порядок"', 'category': 'culture', 'rarity': 'common', 'income': 7, 'price': 180, 'desc': 'Снимаем то, что ты будешь цитировать'},
-    'game_studio': {'name': '🎮 Студия "Зависимость"', 'category': 'culture', 'rarity': 'rare', 'income': 65, 'price': 2000, 'desc': 'Ещё одна серия. Ещё один час.'},
+    'game_studio': {'name': ' Студия "Зависимость"', 'category': 'culture', 'rarity': 'rare', 'income': 65, 'price': 2000, 'desc': 'Ещё одна серия. Ещё один час.'},
     'music_label': {'name': '🎵 Лейбл "Хит или не хит"', 'category': 'culture', 'rarity': 'epic', 'income': 500, 'price': 20000, 'desc': 'Создаём вирусные треки. Литерально.'},
     'publisher': {'name': '📚 Издательство "Бестселлеры"', 'category': 'culture', 'rarity': 'legendary', 'income': 3800, 'price': 180000, 'desc': 'Книги, которые меняют мышление. Наше мышление.'},
     'shadow_agency': {'name': '🕵️ Агентство "Невидимки"', 'category': 'shadow', 'rarity': 'common', 'income': 15, 'price': 400, 'desc': 'Нас не существует. Но мы работаем.'},
@@ -62,18 +63,79 @@ COMBOS = {
 }
 
 RARITY_NAMES = {'common': 'Обычная', 'rare': 'Редкая', 'epic': 'Эпическая', 'legendary': 'Легендарная'}
-CATEGORY_NAMES = {'media': '📰 Медиа', 'finance': '💰 Финансы', 'science': '🔬 Наука', 'culture': '🎭 Культура', 'shadow': '🕵️ Теневые'}
+CATEGORY_NAMES = {'media': '📰 Медиа', 'finance': ' Финансы', 'science': '🔬 Наука', 'culture': '🎭 Культура', 'shadow': '🕵️ Теневые'}
+
+# === ОПЕРАЦИИ (ДЕНЬ 2) ===
+OPERATIONS = {
+    'op1': {
+        'name': '🎯 Операция "Захват СМИ"',
+        'description': 'Получи контроль над информационным пространством',
+        'checkpoints': 5,
+        'influence_required': 10000,
+        'reward': {'influence': 5000, 'cards': ['tv_channel']},
+        'unlocked': True
+    },
+    'op2': {
+        'name': '💰 Операция "Финансовая империя"',
+        'description': 'Создай сеть подконтрольных банков',
+        'checkpoints': 8,
+        'influence_required': 50000,
+        'reward': {'influence': 25000, 'cards': ['hedge_fund']},
+        'unlocked': False
+    },
+    'op3': {
+        'name': '🔬 Операция "Научный прорыв"',
+        'description': 'Финансируй секретные исследования',
+        'checkpoints': 10,
+        'influence_required': 150000,
+        'reward': {'influence': 75000, 'cards': ['ai_lab']},
+        'unlocked': False
+    },
+    'op4': {
+        'name': '🎭 Операция "Культурная революция"',
+        'description': 'Измени мышление миллионов',
+        'checkpoints': 12,
+        'influence_required': 500000,
+        'reward': {'influence': 250000, 'cards': ['publisher']},
+        'unlocked': False
+    },
+    'op5': {
+        'name': '👁️ Операция "Новый Порядок"',
+        'description': 'Финальная цель: мировой контроль',
+        'checkpoints': 20,
+        'influence_required': 2000000,
+        'reward': {'influence': 1000000, 'cards': ['all_seeing']},
+        'unlocked': False
+    }
+}
+
+# === ЭФФЕКТЫ КУБИКА ЗАГОВОРА ===
+DICE_EFFECTS = [
+    {'name': '⚡ Ускорение агентов', 'desc': '×2 тапы на 30 сек', 'type': 'tap_multiplier', 'value': 2.0, 'duration': 30},
+    {'name': '💰 Внезапный взнос', 'desc': '+500 влияния', 'type': 'instant_influence', 'value': 500, 'duration': 0},
+    {'name': '📈 Инсайдерская информация', 'desc': '+50% пассив на 2 мин', 'type': 'passive_multiplier', 'value': 1.5, 'duration': 120},
+    {'name': '🕵️ Двойной агент', 'desc': '-10% влияния', 'type': 'instant_influence', 'value': -0.10, 'duration': 0},
+    {'name': '🎯 Точный удар', 'desc': 'Следующий тап ×5', 'type': 'next_tap_multiplier', 'value': 5.0, 'duration': 0},
+    {'name': '🙏 Благословение Ордена', 'desc': '+1000 влияния', 'type': 'instant_influence', 'value': 1000, 'duration': 0}
+]
 
 # === БАЗА ДАННЫХ ===
 def init_db():
     conn = sqlite3.connect('order.db')
     c = conn.cursor()
+    
+    # Таблица игроков
     c.execute('''CREATE TABLE IF NOT EXISTS players (
         user_id INTEGER PRIMARY KEY, username TEXT,
         influence REAL DEFAULT 0, tap_power REAL DEFAULT 1,
         passive_income REAL DEFAULT 0, last_collect TEXT,
-        groups_owned TEXT DEFAULT '[]', total_taps INTEGER DEFAULT 0
+        groups_owned TEXT DEFAULT '[]', total_taps INTEGER DEFAULT 0,
+        current_operation TEXT DEFAULT 'op1',
+        operation_progress REAL DEFAULT 0,
+        dice_cooldown TEXT DEFAULT '1970-01-01T00:00:00',
+        active_effects TEXT DEFAULT '[]'
     )''')
+    
     conn.commit()
     conn.close()
 
@@ -84,14 +146,18 @@ def get_player(user_id: int) -> dict:
     row = c.fetchone()
     conn.close()
     if not row: return None
-    return {'user_id': row[0], 'username': row[1], 'influence': row[2],
-            'tap_power': row[3], 'passive_income': row[4], 'last_collect': row[5],
-            'groups_owned': json.loads(row[6]), 'total_taps': row[7]}
+    return {
+        'user_id': row[0], 'username': row[1], 'influence': row[2],
+        'tap_power': row[3], 'passive_income': row[4], 'last_collect': row[5],
+        'groups_owned': json.loads(row[6]), 'total_taps': row[7],
+        'current_operation': row[8], 'operation_progress': row[9],
+        'dice_cooldown': row[10], 'active_effects': json.loads(row[11])
+    }
 
 def create_player(user_id: int, username: str):
     conn = sqlite3.connect('order.db')
     c = conn.cursor()
-    c.execute('INSERT INTO players VALUES (?, ?, 0, 1, 0, ?, \'[]\', 0)',
+    c.execute('INSERT INTO players VALUES (?, ?, 0, 1, 0, ?, \'[]\', 0, \'op1\', 0, \'1970-01-01T00:00:00\', \'[]\')',
               (user_id, username, datetime.utcnow().isoformat()))
     conn.commit()
     conn.close()
@@ -100,7 +166,8 @@ def update_player(user_id: int, **kwargs):
     conn = sqlite3.connect('order.db')
     c = conn.cursor()
     for key, value in kwargs.items():
-        if key == 'groups_owned': value = json.dumps(value)
+        if key in ['groups_owned', 'active_effects']:
+            value = json.dumps(value)
         c.execute(f'UPDATE players SET {key} = ? WHERE user_id = ?', (value, user_id))
     conn.commit()
     conn.close()
@@ -130,11 +197,20 @@ def get_effective_income(groups_owned: list) -> float:
     for combo in synergies['combos']: multiplier += combo['bonus']
     return base * multiplier
 
-def get_effective_tap_power(base_power: float, groups_owned: list) -> float:
+def get_effective_tap_power(base_power: float, groups_owned: list, active_effects: list) -> float:
     synergies = calculate_synergies(groups_owned)
     multiplier = 1.0
     for syn in synergies['synergies']:
         if syn['category'] == 'science': multiplier += syn['bonus']
+    
+    # Применяем активные эффекты кубика
+    now = datetime.utcnow()
+    for effect in active_effects:
+        if effect['type'] == 'tap_multiplier':
+            end_time = datetime.fromisoformat(effect['end_time'])
+            if now < end_time:
+                multiplier *= effect['value']
+    
     return base_power * multiplier
 
 def calculate_offline(player: dict) -> float:
@@ -150,7 +226,6 @@ def calculate_offline(player: dict) -> float:
 # === FASTAPI ===
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Запуск бота при старте сервера
     bot_task = asyncio.create_task(run_bot())
     yield
     bot_task.cancel()
@@ -158,28 +233,57 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # для Mini App с Netlify
+    allow_origins=["*"],
     allow_credentials=True, allow_methods=["*"], allow_headers=["*"],
 )
 
 class TapRequest(BaseModel): user_id: int
 class CollectRequest(BaseModel): user_id: int
 class BuyGroupRequest(BaseModel): user_id: int; group_id: str
+class RollDiceRequest(BaseModel): user_id: int
 
 @app.get('/api/catalog')
 def get_catalog():
     return {'cards': GROUPS_CATALOG, 'synergies': SYNERGIES, 'combos': COMBOS,
-            'rarity_names': RARITY_NAMES, 'category_names': CATEGORY_NAMES}
+            'rarity_names': RARITY_NAMES, 'category_names': CATEGORY_NAMES,
+            'operations': OPERATIONS, 'dice_effects': DICE_EFFECTS}
 
 @app.post('/api/tap')
 def tap(req: TapRequest):
     player = get_player(req.user_id)
     if not player: raise HTTPException(status_code=404, detail="Игрок не найден")
-    effective_power = get_effective_tap_power(player['tap_power'], player['groups_owned'])
-    new_influence = player['influence'] + effective_power
+    
+    effective_power = get_effective_tap_power(player['tap_power'], player['groups_owned'], player['active_effects'])
+    
+    # Проверяем эффект "Точный удар" (×5 на следующий тап)
+    now = datetime.utcnow()
+    next_tap_bonus = 1.0
+    remaining_effects = []
+    for effect in player['active_effects']:
+        if effect['type'] == 'next_tap_multiplier':
+            next_tap_bonus = effect['value']
+        else:
+            remaining_effects.append(effect)
+    
+    gained = effective_power * next_tap_bonus
+    new_influence = player['influence'] + gained
     new_taps = player['total_taps'] + 1
-    update_player(req.user_id, influence=new_influence, total_taps=new_taps)
-    return {'influence': new_influence, 'tap_power': effective_power, 'base_power': player['tap_power']}
+    
+    # Обновляем прогресс операции
+    current_op = OPERATIONS.get(player['current_operation'])
+    if current_op:
+        progress_increment = gained / current_op['influence_required']
+        new_progress = min(player['operation_progress'] + progress_increment, 1.0)
+    else:
+        new_progress = player['operation_progress']
+    
+    update_player(req.user_id, influence=new_influence, total_taps=new_taps, 
+                  operation_progress=new_progress, active_effects=remaining_effects)
+    
+    return {
+        'influence': new_influence, 'tap_power': effective_power,
+        'operation_progress': new_progress, 'gained': gained
+    }
 
 @app.post('/api/collect')
 def collect(req: CollectRequest):
@@ -198,27 +302,88 @@ def buy_group(req: BuyGroupRequest):
     group = GROUPS_CATALOG[req.group_id]
     if player['influence'] < group['price']: raise HTTPException(status_code=400, detail="Недостаточно Влияния")
     if req.group_id in player['groups_owned']: raise HTTPException(status_code=400, detail="Группа уже куплена")
+    
     new_influence = player['influence'] - group['price']
     new_groups = player['groups_owned'] + [req.group_id]
     new_passive = get_effective_income(new_groups)
     update_player(req.user_id, influence=new_influence, passive_income=new_passive, groups_owned=new_groups)
+    
     synergies = calculate_synergies(new_groups)
-    return {'influence': new_influence, 'passive_income': new_passive, 'groups_owned': new_groups,
-            'new_synergies': [s['name'] for s in synergies['synergies']],
-            'new_combos': [c['name'] for c in synergies['combos']],
-            'bought_card': group['name']}
+    return {
+        'influence': new_influence, 'passive_income': new_passive, 'groups_owned': new_groups,
+        'new_synergies': [s['name'] for s in synergies['synergies']],
+        'new_combos': [c['name'] for c in synergies['combos']],
+        'bought_card': group['name']
+    }
+
+@app.post('/api/roll_dice')
+def roll_dice(req: RollDiceRequest):
+    player = get_player(req.user_id)
+    if not player: raise HTTPException(status_code=404, detail="Игрок не найден")
+    
+    # Проверяем кулдаун
+    cooldown = datetime.fromisoformat(player['dice_cooldown'])
+    now = datetime.utcnow()
+    if now < cooldown:
+        remaining = (cooldown - now).total_seconds()
+        raise HTTPException(status_code=400, detail=f"Кубик перезаряжается. Осталось {int(remaining)} сек")
+    
+    # Бросаем кубик
+    effect = random.choice(DICE_EFFECTS)
+    
+    # Применяем эффект
+    new_effects = list(player['active_effects'])
+    new_influence = player['influence']
+    
+    if effect['type'] == 'instant_influence':
+        if effect['value'] > 0:
+            new_influence += effect['value']
+        else:
+            new_influence *= (1 + effect['value'])  # негативный эффект
+    elif effect['type'] in ['tap_multiplier', 'passive_multiplier', 'next_tap_multiplier']:
+        end_time = (now + timedelta(seconds=effect['duration'])).isoformat()
+        new_effects.append({
+            'type': effect['type'],
+            'value': effect['value'],
+            'end_time': end_time
+        })
+    
+    # Устанавливаем кулдаун 5 минут
+    new_cooldown = (now + timedelta(minutes=5)).isoformat()
+    update_player(req.user_id, influence=new_influence, dice_cooldown=new_cooldown, active_effects=new_effects)
+    
+    return {'effect': effect, 'influence': new_influence, 'cooldown': new_cooldown}
 
 @app.get('/api/state')
 def get_state(user_id: int):
     player = get_player(user_id)
     if not player: raise HTTPException(status_code=404, detail="Игрок не найден")
+    
     synergies = calculate_synergies(player['groups_owned'])
+    current_op = OPERATIONS.get(player['current_operation'])
+    
+    # Очищаем истёкшие эффекты
+    now = datetime.utcnow()
+    active_effects = [e for e in player['active_effects'] 
+                      if datetime.fromisoformat(e['end_time']) > now]
+    if len(active_effects) != len(player['active_effects']):
+        update_player(user_id, active_effects=active_effects)
+    
     return {
-        'influence': player['influence'], 'tap_power': get_effective_tap_power(player['tap_power'], player['groups_owned']),
-        'base_tap_power': player['tap_power'], 'passive_income': get_effective_income(player['groups_owned']),
-        'groups_owned': player['groups_owned'], 'total_taps': player['total_taps'],
-        'offline_gained': calculate_offline(player), 'last_collect': player['last_collect'],
-        'active_synergies': synergies['synergies'], 'active_combos': synergies['combos']
+        'influence': player['influence'],
+        'tap_power': get_effective_tap_power(player['tap_power'], player['groups_owned'], active_effects),
+        'base_tap_power': player['tap_power'],
+        'passive_income': get_effective_income(player['groups_owned']),
+        'groups_owned': player['groups_owned'],
+        'total_taps': player['total_taps'],
+        'offline_gained': calculate_offline(player),
+        'last_collect': player['last_collect'],
+        'active_synergies': synergies['synergies'],
+        'active_combos': synergies['combos'],
+        'current_operation': current_op,
+        'operation_progress': player['operation_progress'],
+        'dice_cooldown': player['dice_cooldown'],
+        'active_effects': active_effects
     }
 
 @app.get('/health')
@@ -235,10 +400,11 @@ async def cmd_start(message: Message):
     if not get_player(user_id):
         create_player(user_id, username)
         await message.answer(
-            f"🔺 Добро пожаловать в <b>ОРДЕН</b>, {message.from_user.first_name}!\n\n"
+            f" Добро пожаловать в <b>ОРДЕН</b>, {message.from_user.first_name}!\n\n"
             f"👆 Тапай — зарабатывай Влияние\n"
-            f" Покупай Группы — пассивный доход\n"
-            f" Собирай синергии — умножай силу\n\n"
+            f"🏛 Покупай Группы — пассивный доход\n"
+            f" Проходи Операции — получай награды\n"
+            f"🎲 Бросай Кубик Заговора — случайные бонусы\n\n"
             f"Нажми кнопку:",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text=" Начать операцию", web_app=WebAppInfo(url=WEB_APP_URL))
@@ -250,7 +416,8 @@ async def cmd_start(message: Message):
             f" С возвращением, {message.from_user.first_name}!\n\n"
             f"💰 Влияние: <b>{player['influence']:.0f}</b>\n"
             f" Пассив: <b>{get_effective_income(player['groups_owned']):.1f}/сек</b>\n"
-            f"🃏 Групп: <b>{len(player['groups_owned'])}</b>",
+            f"🎯 Операция: <b>{OPERATIONS[player['current_operation']]['name']}</b>\n"
+            f"📊 Прогресс: <b>{player['operation_progress']*100:.1f}%</b>",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(text="🎮 Продолжить", web_app=WebAppInfo(url=WEB_APP_URL))
             ]])
@@ -258,7 +425,7 @@ async def cmd_start(message: Message):
 
 async def run_bot():
     await bot.set_chat_menu_button(
-        MenuButtonWebApp(text="🎮 Играть", web_app=WebAppInfo(url=WEB_APP_URL))
+        MenuButtonWebApp(text=" Играть", web_app=WebAppInfo(url=WEB_APP_URL))
     )
     await dp.start_polling(bot)
 
